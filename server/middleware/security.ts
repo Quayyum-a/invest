@@ -174,6 +174,8 @@ export const validateInput = (
 
 // Enhanced security headers middleware using helmet
 export const securityHeaders = helmet({
+  // Allow static assets like favicon to be requested cross-origin when embedded
+  crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -411,7 +413,48 @@ export const errorHandler = (
 };
 
 // 404 handler
-export const notFoundHandler = (req: Request, res: Response) => {
+export const notFoundHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  // Only treat unknown API-style paths as 404 JSON; allow SPA/static to handle others
+  const apiPrefixes = [
+    "/api/",
+    "/auth",
+    "/wallet",
+    "/transactions",
+    "/services",
+    "/dashboard",
+    "/portfolio",
+    "/investments",
+    "/kyc",
+    "/payments",
+    "/analytics",
+    "/notifications",
+    "/otp",
+    "/roundup",
+    "/achievements",
+    "/leaderboard",
+    "/level",
+    "/crypto",
+    "/bills",
+    "/transfer",
+    "/admin",
+    "/social",
+    "/metrics",
+    "/health",
+    "/ready",
+    "/live",
+  ];
+
+  const isApiLike = apiPrefixes.some((p) => req.path.startsWith(p));
+  const wantsJson = (req.headers.accept || "").includes("application/json");
+
+  if (!(isApiLike || wantsJson)) {
+    return next();
+  }
+
   res.status(404).json({
     success: false,
     error: `Route ${req.method} ${req.path} not found`,
