@@ -193,6 +193,14 @@ export function createServer() {
   // Trust first proxy (Render/Vercel/Railway) so rate limit + IP work correctly
   app.set("trust proxy", 1);
 
+  // Normalize API prefix: allow clients to call either /api/* or non-prefixed paths
+  app.use((req, _res, next) => {
+    if (req.url.startsWith("/api/")) {
+      req.url = req.url.replace(/^\/api\//, "/");
+    }
+    next();
+  });
+
   // Security middleware (apply early)
   app.use(securityHeaders);
   app.use(deviceFingerprinting);
