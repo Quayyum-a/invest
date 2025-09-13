@@ -190,6 +190,8 @@ export function createServer() {
   logConfigStatus();
 
   const app = express();
+  // Trust first proxy (Render/Vercel/Railway) so rate limit + IP work correctly
+  app.set("trust proxy", 1);
 
   // Security middleware (apply early)
   app.use(securityHeaders);
