@@ -1,0 +1,19 @@
+# Exclude VCS and local env
+.git
+.env
+.env.local
+
+# Dependencies
+node_modules
+
+# Logs
+*.log
+
+# Optional: exclude non-critical assets
+mobile
+docs
+scripts
+server/tests
+
+# Do NOT exclude server source files required by functions
+# Keep all server/** and api/** included
