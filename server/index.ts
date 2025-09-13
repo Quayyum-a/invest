@@ -226,11 +226,18 @@ export function createServer() {
         const allowedOrigins = [
           "https://investnaij.netlify.app",
           "https://www.investnaij.netlify.app",
-          env.CORS_ORIGIN
+          env.CORS_ORIGIN,
+          env.FRONTEND_URL,
+          env.APP_URL,
         ].filter(Boolean);
 
-        // Allow any vercel.app or netlify.app subdomain, or if origin is in allowed list
-        if (origin.includes('.vercel.app') || origin.includes('.netlify.app') || allowedOrigins.includes(origin)) {
+        // Allow common hosting domains and explicit allowlist
+        if (
+          origin.includes('.vercel.app') ||
+          origin.includes('.netlify.app') ||
+          origin.includes('.railway.app') ||
+          allowedOrigins.includes(origin)
+        ) {
           return callback(null, true);
         }
         
