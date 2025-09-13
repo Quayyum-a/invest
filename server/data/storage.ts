@@ -12,6 +12,8 @@ const memory = {
   users: [] as Array<any>,
   wallets: new Map<string, any>(),
   sessions: new Map<string, { token: string; userId: string; createdAt: string }>(),
+  transactions: [] as Array<any>,
+  investments: [] as Array<any>,
 };
 
 async function init() {
@@ -451,6 +453,10 @@ export async function createTransactionAsync(
       if (error) throw error;
       return transaction;
     }
+    if (useMemory) {
+      memory.transactions.push(transaction as any);
+      return transaction;
+    }
     const { transactions } = getCollections();
     await transactions.insertOne({ ...transaction });
     return transaction;
@@ -478,6 +484,13 @@ export async function getUserTransactionsAsync(
         .limit(limit);
       if (error) throw error;
       return (data as any) || [];
+    }
+    if (useMemory) {
+      const rows = memory.transactions
+        .filter((t: any) => t.userId === userId)
+        .sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt)))
+        .slice(0, limit);
+      return rows as any;
     }
     const { transactions } = getCollections();
     const rows = await transactions
@@ -531,6 +544,12 @@ export async function updateTransactionAsync(
       if (error) throw error;
       return data as any;
     }
+    if (useMemory) {
+      const idx = memory.transactions.findIndex((t: any) => t.id === transactionId);
+      if (idx === -1) return null as any;
+      memory.transactions[idx] = { ...memory.transactions[idx], ...updates } as any;
+      return memory.transactions[idx] as any;
+    }
     const { transactions } = getCollections();
     const res = await transactions.findOneAndUpdate(
       { id: transactionId },
@@ -566,6 +585,10 @@ export async function createInvestmentAsync(
       if (error) throw error;
       return investment;
     }
+    if (useMemory) {
+      memory.investments.push(investment as any);
+      return investment;
+    }
     const { investments } = getCollections();
     await investments.insertOne(investment as any);
     return investment;
@@ -586,6 +609,11 @@ export async function getUserInvestmentsAsync(userId: string): Promise<Investmen
         .order("createdAt", { ascending: false });
       if (error) throw error;
       return (data as any) || [];
+    }
+    if (useMemory) {
+      return memory.investments
+        .filter((i: any) => i.userId === userId)
+        .sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt))) as any;
     }
     const { investments } = getCollections();
     return (await investments.find({ userId }).sort({ createdAt: -1 }).toArray()) as any;
@@ -613,6 +641,12 @@ export async function updateInvestmentAsync(
         .single();
       if (error) throw error;
       return data as any;
+    }
+    if (useMemory) {
+      const idx = memory.investments.findIndex((i: any) => i.id === investmentId);
+      if (idx === -1) return null as any;
+      memory.investments[idx] = { ...memory.investments[idx], ...updates } as any;
+      return memory.investments[idx] as any;
     }
     const { investments } = getCollections();
     const res = await investments.findOneAndUpdate(
