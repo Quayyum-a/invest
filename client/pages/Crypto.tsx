@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import BottomNavigation from "../components/BottomNavigation";
 
@@ -63,6 +64,7 @@ export default function Crypto() {
   );
   const [buyAmount, setBuyAmount] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const { token } = useAuth();
   const [portfolioValue, setPortfolioValue] = useState(0);
 
   useEffect(() => {
@@ -159,7 +161,7 @@ export default function Crypto() {
     try {
       const response = await fetch("/api/crypto/holdings", {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("investnaija_token")}`,
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -225,7 +227,7 @@ export default function Crypto() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("investnaija_token")}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           cryptoId: selectedCrypto.id,
