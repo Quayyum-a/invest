@@ -96,7 +96,7 @@ export default function BulkPayments() {
       // Fetch real bulk payments from API
       const response = await fetch("/api/bulk-payments", {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem("investnaija_token")}`,
         },
       });
 

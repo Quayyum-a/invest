@@ -39,33 +39,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     // Check for existing auth on app load
     const savedToken = localStorage.getItem("investnaija_token");
+    const savedUser = localStorage.getItem("investnaija_user");
+
     if (savedToken) {
       setToken(savedToken);
+      // Hydrate user immediately from localStorage for seamless UX
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch {
+          // Ignore parse errors
+        }
+      }
 
       // Verify token with server with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${savedToken}`,
-        },
+        headers: { Authorization: `Bearer ${savedToken}` },
         signal: controller.signal,
       })
-        .then((res) => res.json())
+        .then(async (res) => {
+          if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
+              localStorage.removeItem("investnaija_token");
+              localStorage.removeItem("investnaija_user");
+              setToken(null);
+              setUser(null);
+            }
+            return null;
+          }
+          try {
+            return await res.json();
+          } catch {
+            return null;
+          }
+        })
         .then((data) => {
-          if (data.success && data.user) {
+          if (data && data.success && data.user) {
             setUser(data.user);
-          } else {
-            // Invalid token, remove it
-            localStorage.removeItem("investnaija_token");
-            setToken(null);
+            localStorage.setItem("investnaija_user", JSON.stringify(data.user));
           }
         })
         .catch(() => {
-          // Error verifying token or timeout
-          localStorage.removeItem("investnaija_token");
-          setToken(null);
+          // Network error or timeout – keep existing token/user
         })
         .finally(() => {
           clearTimeout(timeoutId);
@@ -134,6 +152,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(data.user);
         setToken(data.token);
         localStorage.setItem("investnaija_token", data.token);
+        localStorage.setItem("investnaija_user", JSON.stringify(data.user));
       }
 
       return data;
@@ -211,6 +230,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(data.user);
         setToken(data.token);
         localStorage.setItem("investnaija_token", data.token);
+        localStorage.setItem("investnaija_user", JSON.stringify(data.user));
       }
 
       return data;
@@ -239,6 +259,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(null);
     setToken(null);
     localStorage.removeItem("investnaija_token");
+    localStorage.removeItem("investnaija_user");
   };
 
   const value: AuthContextType = {

@@ -53,7 +53,7 @@ export const TransactionManagement: React.FC = () => {
         `/admin/transactions?status=${filter}&search=${searchTerm}`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${localStorage.getItem("investnaija_token")}`,
           },
         },
       );

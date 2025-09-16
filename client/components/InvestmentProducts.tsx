@@ -191,7 +191,7 @@ export default function InvestmentProducts() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem("investnaija_token")}`,
         },
         body: JSON.stringify({
           amount,

@@ -18,8 +18,69 @@ class ApiService {
     const token = localStorage.getItem("investnaija_token");
     return {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+  }
+
+  private isRefreshing = false;
+  private refreshPromise: Promise<boolean> | null = null;
+
+  private async refreshToken(): Promise<boolean> {
+    if (this.isRefreshing && this.refreshPromise) return this.refreshPromise;
+    this.isRefreshing = true;
+    this.refreshPromise = (async () => {
+      try {
+        const res = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (data && data.success && data.token) {
+          localStorage.setItem("investnaija_token", data.token);
+          if (data.user) {
+            localStorage.setItem("investnaija_user", JSON.stringify(data.user));
+          }
+          return true;
+        }
+        return false;
+      } catch (e) {
+        return false;
+      } finally {
+        this.isRefreshing = false;
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
+  private async doFetch(input: RequestInfo, init: RequestInit = {}, retry = true): Promise<Response> {
+    init.headers = {
+      "Content-Type": "application/json",
+      ...(init.headers as Record<string, string>),
+    } as Record<string, string>;
+
+    const token = localStorage.getItem("investnaija_token");
+    if (token) {
+      (init.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+    }
+
+    let response = await fetch(input, init);
+
+    if (response.status === 401 && retry) {
+      const refreshed = await this.refreshToken();
+      if (refreshed) {
+        const newToken = localStorage.getItem("investnaija_token");
+        if (newToken) {
+          (init.headers as Record<string, string>).Authorization = `Bearer ${newToken}`;
+        }
+        response = await fetch(input, init);
+      }
+    }
+
+    return response;
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
@@ -32,14 +93,14 @@ class ApiService {
 
   // Wallet operations
   async getWallet(): Promise<WalletResponse> {
-    const response = await fetch("/api/wallet", {
+    const response = await this.doFetch("/api/wallet", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<WalletResponse>(response);
   }
 
   async addMoney(amount: number, metadata?: Record<string, any>): Promise<any> {
-    const response = await fetch("/api/wallet/add", {
+    const response = await this.doFetch("/api/wallet/add", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({
@@ -61,7 +122,7 @@ class ApiService {
       accountName: string;
     },
   ): Promise<any> {
-    const response = await fetch("/api/wallet/withdraw", {
+    const response = await this.doFetch("/api/wallet/withdraw", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({
@@ -78,7 +139,7 @@ class ApiService {
     investmentType: string,
     metadata?: Record<string, any>,
   ): Promise<any> {
-    const response = await fetch("/api/wallet/invest", {
+    const response = await this.doFetch("/api/wallet/invest", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({
@@ -93,21 +154,21 @@ class ApiService {
 
   // Dashboard operations
   async getDashboardData(): Promise<{ success: boolean; data: DashboardData }> {
-    const response = await fetch("/api/dashboard", {
+    const response = await this.doFetch("/api/dashboard", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async getPortfolioData(): Promise<{ success: boolean; data: PortfolioData }> {
-    const response = await fetch("/api/portfolio", {
+    const response = await this.doFetch("/api/portfolio", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async getTransactions(): Promise<any> {
-    const response = await fetch("/api/transactions", {
+    const response = await this.doFetch("/api/transactions", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -115,7 +176,7 @@ class ApiService {
 
   // Investment operations
   async getInvestmentProducts(): Promise<any> {
-    const response = await fetch("/api/investments/products", {
+    const response = await this.doFetch("/api/investments/products", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -125,7 +186,7 @@ class ApiService {
     purchaseAmount: number,
     roundUpAmount: number,
   ): Promise<any> {
-    const response = await fetch("/api/investments/roundup", {
+    const response = await this.doFetch("/api/investments/roundup", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ purchaseAmount, roundUpAmount }),
@@ -134,7 +195,7 @@ class ApiService {
   }
 
   async withdrawInvestment(investmentId: string, amount: number): Promise<any> {
-    const response = await fetch("/api/investments/withdraw", {
+    const response = await this.doFetch("/api/investments/withdraw", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ investmentId, amount }),
@@ -143,7 +204,7 @@ class ApiService {
   }
 
   async getInvestmentPerformance(): Promise<any> {
-    const response = await fetch("/api/investments/performance", {
+    const response = await this.doFetch("/api/investments/performance", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -155,7 +216,7 @@ class ApiService {
     nin: string;
     documents: File[];
   }): Promise<any> {
-    const response = await fetch("/api/kyc/submit", {
+    const response = await this.doFetch("/api/kyc/submit", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify(kycData),
@@ -164,14 +225,14 @@ class ApiService {
   }
 
   async getKYCStatus(): Promise<any> {
-    const response = await fetch("/api/kyc/status", {
+    const response = await this.doFetch("/api/kyc/status", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async uploadKYCDocument(documentType: string, file: File): Promise<any> {
-    const response = await fetch("/api/kyc/upload", {
+    const response = await this.doFetch("/api/kyc/upload", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ documentType, file }),
@@ -181,14 +242,14 @@ class ApiService {
 
   // Payment operations
   async getBanks(): Promise<any> {
-    const response = await fetch("/api/payments/banks", {
+    const response = await this.doFetch("/api/payments/banks", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async initiatePaystackPayment(amount: number): Promise<any> {
-    const response = await fetch("/api/payments/paystack/initiate", {
+    const response = await this.doFetch("/api/payments/paystack/initiate", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({
@@ -201,7 +262,7 @@ class ApiService {
   }
 
   async linkBankAccount(accountNumber: string, bankCode: string): Promise<any> {
-    const response = await fetch("/api/payments/link-bank", {
+    const response = await this.doFetch("/api/payments/link-bank", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ accountNumber, bankCode }),
@@ -210,7 +271,7 @@ class ApiService {
   }
 
   async initiateBankTransfer(amount: number, accountId: string): Promise<any> {
-    const response = await fetch("/api/payments/bank-transfer", {
+    const response = await this.doFetch("/api/payments/bank-transfer", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ amount, accountId }),
@@ -219,7 +280,7 @@ class ApiService {
   }
 
   async generateVirtualAccount(): Promise<any> {
-    const response = await fetch("/api/payments/virtual-account", {
+    const response = await this.doFetch("/api/payments/virtual-account", {
       method: "POST",
       headers: this.getAuthHeaders(),
     });
@@ -227,7 +288,7 @@ class ApiService {
   }
 
   async verifyPaystackPayment(reference: string): Promise<any> {
-    const response = await fetch(`/api/payments/paystack/verify/${reference}`, {
+    const response = await this.doFetch(`/api/payments/paystack/verify/${reference}`, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -237,7 +298,7 @@ class ApiService {
     accountNumber: string,
     bankCode: string,
   ): Promise<any> {
-    const response = await fetch("/api/payments/verify-account", {
+    const response = await this.doFetch("/api/payments/verify-account", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ accountNumber, bankCode }),
@@ -247,7 +308,7 @@ class ApiService {
 
   // Identity verification
   async verifyBVN(bvn: string): Promise<any> {
-    const response = await fetch("/api/payments/verify-bvn", {
+    const response = await this.doFetch("/api/payments/verify-bvn", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ bvn }),
@@ -256,7 +317,7 @@ class ApiService {
   }
 
   async verifyNIN(nin: string): Promise<any> {
-    const response = await fetch("/api/payments/verify-nin", {
+    const response = await this.doFetch("/api/payments/verify-nin", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ nin }),
@@ -266,7 +327,7 @@ class ApiService {
 
   // OTP operations
   async sendOTP(phoneNumber: string): Promise<any> {
-    const response = await fetch("/api/otp/send", {
+    const response = await this.doFetch("/api/otp/send", {
       method: "POST",
       headers: this.getHeaders(),
       body: JSON.stringify({ phoneNumber }),
@@ -275,7 +336,7 @@ class ApiService {
   }
 
   async verifyOTP(phoneNumber: string, otp: string): Promise<any> {
-    const response = await fetch("/api/otp/verify", {
+    const response = await this.doFetch("/api/otp/verify", {
       method: "POST",
       headers: this.getHeaders(),
       body: JSON.stringify({ phoneNumber, otp }),
@@ -285,21 +346,21 @@ class ApiService {
 
   // Bill payment operations
   async getBillers(): Promise<any> {
-    const response = await fetch("/api/bills/billers", {
+    const response = await this.doFetch("/api/bills/billers", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async getElectricityCompanies(): Promise<any> {
-    const response = await fetch("/api/bills/electricity/companies", {
+    const response = await this.doFetch("/api/bills/electricity/companies", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async validateCustomer(billerId: string, customerCode: string): Promise<any> {
-    const response = await fetch("/api/bills/validate-customer", {
+    const response = await this.doFetch("/api/bills/validate-customer", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ billerId, customerCode }),
@@ -318,7 +379,7 @@ class ApiService {
     amount: number;
     phone: string;
   }): Promise<any> {
-    const response = await fetch("/api/bills/pay-electricity", {
+    const response = await this.doFetch("/api/bills/pay-electricity", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ billerId, customerCode, amount, phone }),
@@ -335,7 +396,7 @@ class ApiService {
     phone: string;
     amount: number;
   }): Promise<any> {
-    const response = await fetch("/api/bills/buy-airtime", {
+    const response = await this.doFetch("/api/bills/buy-airtime", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ network, phone, amount }),
@@ -354,7 +415,7 @@ class ApiService {
     planId: string;
     amount: number;
   }): Promise<any> {
-    const response = await fetch("/api/bills/buy-data", {
+    const response = await this.doFetch("/api/bills/buy-data", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ network, phone, planId, amount }),
@@ -373,7 +434,7 @@ class ApiService {
     planId: string;
     amount: number;
   }): Promise<any> {
-    const response = await fetch("/api/bills/pay-cable-tv", {
+    const response = await this.doFetch("/api/bills/pay-cable-tv", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ provider, smartCardNumber, planId, amount }),
@@ -383,7 +444,7 @@ class ApiService {
 
   // Transfer operations
   async getBanksForTransfer(): Promise<any> {
-    const response = await fetch("/api/transfer/banks", {
+    const response = await this.doFetch("/api/transfer/banks", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -393,7 +454,7 @@ class ApiService {
     accountNumber: string,
     bankCode: string,
   ): Promise<any> {
-    const response = await fetch("/api/transfer/verify-account", {
+    const response = await this.doFetch("/api/transfer/verify-account", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ accountNumber, bankCode }),
@@ -414,7 +475,7 @@ class ApiService {
     narration?: string;
     beneficiaryName: string;
   }): Promise<any> {
-    const response = await fetch("/api/transfer/initiate", {
+    const response = await this.doFetch("/api/transfer/initiate", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({
@@ -430,14 +491,14 @@ class ApiService {
 
   // Analytics operations
   async getUserAnalytics(): Promise<any> {
-    const response = await fetch("/api/analytics/user", {
+    const response = await this.doFetch("/api/analytics/user", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async getAppAnalytics(): Promise<any> {
-    const response = await fetch("/api/analytics/app", {
+    const response = await this.doFetch("/api/analytics/app", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -445,7 +506,7 @@ class ApiService {
 
   // Admin operations
   async getAdminStats(): Promise<any> {
-    const response = await fetch("/api/admin/stats", {
+    const response = await this.doFetch("/api/admin/stats", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -455,21 +516,21 @@ class ApiService {
     const url = search
       ? `/api/admin/users?search=${encodeURIComponent(search)}`
       : "/api/admin/users";
-    const response = await fetch(url, {
+    const response = await this.doFetch(url, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async getUserDetails(userId: string): Promise<any> {
-    const response = await fetch(`/api/admin/users/${userId}`, {
+    const response = await this.doFetch(`/api/admin/users/${userId}`, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async updateUserKYC(userId: string, kycStatus: string): Promise<any> {
-    const response = await fetch(`/api/admin/users/${userId}/kyc`, {
+    const response = await this.doFetch(`/api/admin/users/${userId}/kyc`, {
       method: "PUT",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ kycStatus }),
@@ -478,7 +539,7 @@ class ApiService {
   }
 
   async updateUserStatus(userId: string, status: string): Promise<any> {
-    const response = await fetch(`/api/admin/users/${userId}/status`, {
+    const response = await this.doFetch(`/api/admin/users/${userId}/status`, {
       method: "PUT",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ status }),
@@ -495,14 +556,14 @@ class ApiService {
     if (limit) params.append("limit", limit.toString());
     if (unreadOnly) params.append("unreadOnly", "true");
 
-    const response = await fetch(`/api/notifications?${params}`, {
+    const response = await this.doFetch(`/api/notifications?${params}`, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async markNotificationRead(notificationId: string): Promise<any> {
-    const response = await fetch(`/api/notifications/${notificationId}/read`, {
+    const response = await this.doFetch(`/api/notifications/${notificationId}/read`, {
       method: "PUT",
       headers: this.getAuthHeaders(),
     });
@@ -510,7 +571,7 @@ class ApiService {
   }
 
   async markAllNotificationsRead(): Promise<any> {
-    const response = await fetch("/api/notifications/mark-all-read", {
+    const response = await this.doFetch("/api/notifications/mark-all-read", {
       method: "PUT",
       headers: this.getAuthHeaders(),
     });
@@ -518,7 +579,7 @@ class ApiService {
   }
 
   async deleteNotification(notificationId: string): Promise<any> {
-    const response = await fetch(`/api/notifications/${notificationId}`, {
+    const response = await this.doFetch(`/api/notifications/${notificationId}`, {
       method: "DELETE",
       headers: this.getAuthHeaders(),
     });
@@ -527,14 +588,14 @@ class ApiService {
 
   // Achievement operations
   async getUserAchievements(): Promise<any> {
-    const response = await fetch("/api/achievements", {
+    const response = await this.doFetch("/api/achievements", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async getUserLevel(): Promise<any> {
-    const response = await fetch("/api/level", {
+    const response = await this.doFetch("/api/level", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
@@ -545,14 +606,14 @@ class ApiService {
     if (category) params.append("category", category);
     if (period) params.append("period", period);
 
-    const response = await fetch(`/api/leaderboard?${params}`, {
+    const response = await this.doFetch(`/api/leaderboard?${params}`, {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse(response);
   }
 
   async claimAchievementReward(achievementId: string): Promise<any> {
-    const response = await fetch("/api/achievements/claim", {
+    const response = await this.doFetch("/api/achievements/claim", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ achievementId }),
@@ -562,14 +623,14 @@ class ApiService {
 
   // Crypto operations
   async getCryptoMarketData(): Promise<CryptoMarketResponse> {
-    const response = await fetch("/api/crypto/market", {
+    const response = await this.doFetch("/api/crypto/market", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<CryptoMarketResponse>(response);
   }
 
   async getUserCryptoHoldings(): Promise<CryptoPortfolioResponse> {
-    const response = await fetch("/api/crypto/holdings", {
+    const response = await this.doFetch("/api/crypto/holdings", {
       headers: this.getAuthHeaders(),
     });
     return this.handleResponse<CryptoPortfolioResponse>(response);
@@ -579,7 +640,7 @@ class ApiService {
     symbol: string,
     amountNGN: number,
   ): Promise<CryptoTransactionResponse> {
-    const response = await fetch("/api/crypto/buy", {
+    const response = await this.doFetch("/api/crypto/buy", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ symbol, amountNGN }),
@@ -591,7 +652,7 @@ class ApiService {
     symbol: string,
     quantity: number,
   ): Promise<CryptoTransactionResponse> {
-    const response = await fetch("/api/crypto/sell", {
+    const response = await this.doFetch("/api/crypto/sell", {
       method: "POST",
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ symbol, quantity }),

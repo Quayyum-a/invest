@@ -29,6 +29,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import BottomNavigation from "../components/BottomNavigation";
+import { apiService } from "../lib/api";
 
 interface CryptoCurrency {
   id: string;
@@ -76,11 +77,10 @@ export default function Crypto() {
     try {
       setRefreshing(true);
       // Use actual API endpoint
-      const response = await fetch("/api/crypto/market");
-      const data = await response.json();
+      const result = await apiService.getCryptoMarketData();
 
-      if (data.success) {
-        setCryptos(data.data);
+      if (result && (result as any).success) {
+        setCryptos((result as any).data || []);
       } else {
         // Fallback to mock data if API fails
         const mockCryptos: CryptoCurrency[] = [
@@ -159,19 +159,12 @@ export default function Crypto() {
 
   const fetchHoldings = async () => {
     try {
-      const response = await fetch("/api/crypto/holdings", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const result = await apiService.getUserCryptoHoldings();
 
-      const data = await response.json();
-
-      if (data.success && data.data) {
-        setHoldings(data.data.holdings || []);
-        setPortfolioValue(data.data.portfolioValue || 0);
+      if (result && (result as any).success && (result as any).data) {
+        setHoldings((result as any).data.holdings || []);
+        setPortfolioValue((result as any).data.portfolioValue || 0);
       } else {
-        // No dummy data - start with empty portfolio
         setHoldings([]);
         setPortfolioValue(0);
       }
@@ -223,25 +216,13 @@ export default function Crypto() {
 
     try {
       // Use API to buy crypto
-      const response = await fetch("/api/crypto/buy", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          cryptoId: selectedCrypto.id,
-          amount: parseFloat(buyAmount),
-        }),
-      });
+      const data = await apiService.buyCrypto(selectedCrypto.id, parseFloat(buyAmount));
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (data && (data as any).success) {
         toast({
           title: "Purchase Successful!",
           description:
-            data.message ||
+            (data as any).message ||
             `Successfully bought $${buyAmount} worth of ${selectedCrypto.name}`,
         });
         setBuyAmount("");
@@ -250,7 +231,7 @@ export default function Crypto() {
       } else {
         toast({
           title: "Purchase Failed",
-          description: data.error || "Failed to process crypto purchase",
+          description: (data as any).error || "Failed to process crypto purchase",
           variant: "destructive",
         });
       }
